@@ -5,17 +5,22 @@ import (
 	"image/color"
 	"math/rand"
 	"net/url"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"seeyouvideo/src/db"
 	"seeyouvideo/src/usuarios"
 	"seeyouvideo/src/videos"
+
+	"net/http"
+	"seeyouvideo/src/api"
 )
 
 // usuarioActual guarda la sesión activa, pa que las demás pantallas
@@ -43,6 +48,14 @@ func main() {
 	authServicio := usuarios.NuevoServicioAuth(repoUsuarios)
 
 	repoVideos := videos.NuevoRepositorioVideosMySQL(conexion)
+	servidor := api.NuevoServidor(authServicio, repoUsuarios, repoVideos)
+
+	go func() {
+		err := http.ListenAndServe(":8081", servidor.Rutas())
+		if err != nil {
+			fmt.Println("ERROR DEL SERVIDOR:", err)
+		}
+	}()
 
 	a := app.New()
 	a.Settings().SetTheme(&temaOscuro{}) // nuestro tema custom cielo nocturno
@@ -58,7 +71,7 @@ func main() {
 
 // --- TEMA CUSTOM: cielo nocturno ---
 // Fyne permite meter un tema propio implementando la interfaz fyne.Theme.
-// Aquí solo cambiamos los colores clave, el resto lo dejamos por default.
+// Aquí solo cambie los colores clave, el resto lo dejamos por default.
 type temaOscuro struct{}
 
 func (temaOscuro) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
@@ -224,8 +237,16 @@ func mostrarPantallaCatalogo(w fyne.Window, a fyne.App, repoVideos *videos.Repos
 		}
 
 		for _, v := range lista {
-			v := v // copia local, pa que cada botón sepa cuál video es el suyo
+			v := v
+			idYoutube := extraerIDYoutube(v.URL())
+			urlMiniatura := "https://img.youtube.com/vi/" + idYoutube + "/hqdefault.jpg"
+
+			miniatura := canvas.NewImageFromURI(storage.NewURI(urlMiniatura))
+			miniatura.FillMode = canvas.ImageFillContain
+			miniatura.SetMinSize(fyne.NewSize(100, 56))
+
 			fila := container.NewHBox(
+				miniatura,
 				widget.NewLabel(fmt.Sprintf("🎬 %s — %s", v.Titulo(), v.Categoria())),
 				widget.NewButton("Ver", func() {
 					u, err := url.Parse(v.URL())
@@ -316,4 +337,24 @@ func mostrarDialogoAgregarVideo(w fyne.Window, a fyne.App, repoVideos *videos.Re
 	contenido := container.NewStack(fondo, container.NewPadded(formulario))
 
 	w.SetContent(contenido)
+}
+
+func extraerIDYoutube(urlVideo string) string {
+	if strings.Contains(urlVideo, "v=") {
+		partes := strings.Split(urlVideo, "v=")
+		id := partes[1]
+		if amp := strings.Index(id, "&"); amp != -1 {
+			id = id[:amp]
+		}
+		return id
+	}
+	if strings.Contains(urlVideo, "youtu.be/") {
+		partes := strings.Split(urlVideo, "youtu.be/")
+		id := partes[1]
+		if q := strings.Index(id, "?"); q != -1 {
+			id = id[:q]
+		}
+		return id
+	}
+	return ""
 }

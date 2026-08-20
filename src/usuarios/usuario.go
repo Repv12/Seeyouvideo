@@ -32,9 +32,8 @@ var (
 
 // Lista blanca de planes válidos, para no aceptar cualquier texto.
 var planesValidos = map[string]bool{
-	"basico":   true,
-	"estandar": true,
-	"premium":  true,
+	"basico":  true,
+	"premium": true,
 }
 
 // NuevoUsuario es el CONSTRUCTOR: la única forma "correcta" de crear un
